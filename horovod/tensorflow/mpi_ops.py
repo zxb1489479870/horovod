@@ -187,6 +187,10 @@ def _broadcast_grad(op, grad):
 def size_op(name=None):
     """An op that returns the number of Horovod processes.
 
+    This operation determines the return value at the graph execution time,
+    rather than at the graph construction time, and so allows for graph to be
+    constructed in the different environment than where it will be executed.
+
     Returns:
       An integer scalar containing the number of Horovod processes.
     """
@@ -200,6 +204,10 @@ def local_size_op(name=None):
     """An op that returns the number of Horovod processes within the
     node the current process is running on.
 
+    This operation determines the return value at the graph execution time,
+    rather than at the graph construction time, and so allows for graph to be
+    constructed in the different environment than where it will be executed.
+
     Returns:
       An integer scalar containing the number of local Horovod processes.
     """
@@ -211,6 +219,10 @@ ops.NotDifferentiable('HorovodLocalSize')
 
 def rank_op(name=None):
     """An op that returns the Horovod rank of the calling process.
+
+    This operation determines the return value at the graph execution time,
+    rather than at the graph construction time, and so allows for graph to be
+    constructed in the different environment than where it will be executed.
 
     Returns:
       An integer scalar with the Horovod rank of the calling process.
@@ -225,6 +237,10 @@ def local_rank_op(name=None):
     """An op that returns the local Horovod rank of the calling process, within the
     node that it is running on. For example, if there are seven processes running
     on a node, their local ranks will be zero through six, inclusive.
+
+    This operation determines the return value at the graph execution time,
+    rather than at the graph construction time, and so allows for graph to be
+    constructed in the different environment than where it will be executed.
 
     Returns:
       An integer scalar with the local Horovod rank of the calling process.
