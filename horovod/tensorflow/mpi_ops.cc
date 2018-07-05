@@ -357,7 +357,7 @@ public:
         });
     OP_REQUIRES_OK_ASYNC(context, ConvertStatus(enqueue_result), done);
   }
-}; // namespace tensorflow
+};
 
 REGISTER_KERNEL_BUILDER(Name("HorovodAllgather").Device(DEVICE_CPU),
                         HorovodAllgatherOp);
@@ -460,6 +460,117 @@ Arguments
 Output
     output:    A tensor with the same shape as `tensor` and same value as
                `tensor` on root rank.
+)doc");
+
+template <typename T, T f()> class HorovodReturnScalarOp : public OpKernel {
+public:
+  explicit HorovodReturnScalarOp(OpKernelConstruction* context)
+      : OpKernel(context) {}
+
+  void Compute(OpKernelContext* context) override {
+    OP_REQUIRES_OK(context, ConvertStatus(common::CheckInitialized()));
+
+    // Write integer to output tensor
+    Tensor* output;
+    OP_REQUIRES_OK(context,
+                   context->allocate_output(0, TensorShape({}), &output));
+
+    auto flat = output->flat<T>();
+    flat(0) = f();
+  }
+};
+
+REGISTER_KERNEL_BUILDER(
+    Name("HorovodSize").Device(DEVICE_CPU).HostMemory("size"),
+    HorovodReturnScalarOp<int, common::horovod_size>);
+#if HOROVOD_GPU_BROADCAST
+REGISTER_KERNEL_BUILDER(
+    Name("HorovodSize").Device(DEVICE_GPU).HostMemory("size"),
+    HorovodReturnScalarOp<int, common::horovod_size>);
+#endif
+
+REGISTER_OP("HorovodSize")
+    .Output("size: int32")
+    .SetShapeFn([](shape_inference::InferenceContext* c) {
+      c->set_output(0, c->Scalar());
+      return Status::OK();
+    })
+    .Doc(R"doc(
+Returns the number of Horovod processes.
+
+Output
+    size:    An integer scalar containing the number of Horovod processes.
+)doc");
+
+REGISTER_KERNEL_BUILDER(
+    Name("HorovodLocalSize").Device(DEVICE_CPU).HostMemory("local_size"),
+    HorovodReturnScalarOp<int, common::horovod_local_size>);
+#if HOROVOD_GPU_BROADCAST
+REGISTER_KERNEL_BUILDER(
+    Name("HorovodLocalSize").Device(DEVICE_GPU).HostMemory("local_size"),
+    HorovodReturnScalarOp<int, common::horovod_local_size>);
+#endif
+
+REGISTER_OP("HorovodLocalSize")
+    .Output("local_size: int32")
+    .SetShapeFn([](shape_inference::InferenceContext* c) {
+      c->set_output(0, c->Scalar());
+      return Status::OK();
+    })
+    .Doc(R"doc(
+Returns the number of Horovod processes within the node the current process is
+running on.
+
+Output
+    local_size:    An integer scalar containing the number of local Horovod
+                   processes.
+)doc");
+
+REGISTER_KERNEL_BUILDER(
+    Name("HorovodRank").Device(DEVICE_CPU).HostMemory("rank"),
+    HorovodReturnScalarOp<int, common::horovod_rank>);
+#if HOROVOD_GPU_BROADCAST
+REGISTER_KERNEL_BUILDER(
+    Name("HorovodRank").Device(DEVICE_GPU).HostMemory("rank"),
+    HorovodReturnScalarOp<int, common::horovod_rank>);
+#endif
+
+REGISTER_OP("HorovodRank")
+    .Output("rank: int32")
+    .SetShapeFn([](shape_inference::InferenceContext* c) {
+      c->set_output(0, c->Scalar());
+      return Status::OK();
+    })
+    .Doc(R"doc(
+Returns the Horovod rank of the calling process.
+
+Output
+    rank:    An integer scalar with the Horovod rank of the calling process.
+)doc");
+
+REGISTER_KERNEL_BUILDER(
+    Name("HorovodLocalRank").Device(DEVICE_CPU).HostMemory("local_rank"),
+    HorovodReturnScalarOp<int, common::horovod_local_rank>);
+#if HOROVOD_GPU_BROADCAST
+REGISTER_KERNEL_BUILDER(
+    Name("HorovodLocalRank").Device(DEVICE_GPU).HostMemory("local_rank"),
+    HorovodReturnScalarOp<int, common::horovod_local_rank>);
+#endif
+
+REGISTER_OP("HorovodLocalRank")
+    .Output("local_rank: int32")
+    .SetShapeFn([](shape_inference::InferenceContext* c) {
+      c->set_output(0, c->Scalar());
+      return Status::OK();
+    })
+    .Doc(R"doc(
+Returns the local Horovod rank of the calling process, within the node that it
+is running on. For example, if there are seven processes running on a node,
+their local ranks will be zero through six, inclusive.
+
+Output
+    local_rank:    An integer scalar with the local Horovod rank of the calling
+                   process.
 )doc");
 
 } // namespace tensorflow
