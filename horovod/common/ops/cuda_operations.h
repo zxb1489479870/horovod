@@ -10,7 +10,7 @@
 
 #include <cuda_runtime.h>
 
-#include "mpi_operations.h"
+#include "collective_operations.h"
 
 namespace horovod {
 namespace common {
@@ -80,9 +80,11 @@ struct CUDAContext {
   std::mutex cuda_events_mutex;
 };
 
-class CUDAAllreduce : public MPIAllreduce {
+class CUDAAllreduce : public AllreduceOp {
 public:
-  CUDAAllreduce(CUDAContext* context, HorovodGlobalState* global_state);
+  CUDAAllreduce(CUDAContext* context,
+                CommunicationContext* comm_context,
+                HorovodGlobalState* global_state);
   void Allreduce(std::vector<TensorTableEntry>& entries, std::vector<int32_t>& devices) override;
 
 protected:
@@ -100,7 +102,9 @@ protected:
 
 class CUDACustomAllreduce : public CUDAAllreduce {
 public:
-  CUDACustomAllreduce(CUDAContext* context, HorovodGlobalState* global_state);
+  CUDACustomAllreduce(CUDAContext* context,
+                      CommunicationContext* comm_context,
+                      HorovodGlobalState* global_state);
   void Allreduce(std::vector<TensorTableEntry>& entries, std::vector<int32_t>& devices) override;
 
 protected:

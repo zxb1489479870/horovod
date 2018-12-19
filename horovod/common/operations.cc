@@ -30,7 +30,7 @@
 #include "fusion_buffer_manager.h"
 #include "parameter_manager.h"
 #include "mpi.h"
-#include "mpi_message.h"
+#include "message/mpi_message.h"
 #include "operations.h"
 #include "timeline.h"
 

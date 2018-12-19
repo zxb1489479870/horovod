@@ -20,7 +20,7 @@
 #include <memory>
 #include <string>
 
-#include "mpi_message.h"
+#include "message/mpi_message.h"
 
 namespace horovod {
 namespace common {
@@ -115,7 +115,7 @@ public:
 
 class Tensor {
 public:
-  virtual const MPIDataType dtype() const = 0;
+  virtual const DataType dtype() const = 0;
   virtual const TensorShape shape() const = 0;
   virtual const void* data() const = 0;
   virtual int64_t size() const = 0;

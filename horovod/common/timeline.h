@@ -23,7 +23,7 @@
 #include <mutex>
 
 #include "common.h"
-#include "mpi_message.h"
+#include "message/mpi_message.h"
 
 namespace horovod {
 namespace common {

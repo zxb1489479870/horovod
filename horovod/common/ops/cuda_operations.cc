@@ -53,22 +53,26 @@ bool CUDAOperation::OnGPU_NoMPI(TensorTableEntry e) const {
   return e.device != CPU_DEVICE_ID;
 }
 
-CUDAAllreduce::CUDAAllreduce(CUDAContext* context, HorovodGlobalState* global_state)
-: MPIAllreduce(global_state), cuda_context_(context) {}
+CUDAAllreduce::CUDAAllreduce(CUDAContext* context,
+                             CommunicationContext* comm_context,
+                             HorovodGlobalState* global_state)
+                             : AllreduceOp(comm_context, global_state), cuda_context_(context) {}
 
 void CUDAAllreduce::Allreduce(std::vector<TensorTableEntry>& entries, std::vector<int32_t>& devices) {
   if (OnGPU(entries)) {
     InitCUDA(entries);
   }
-  MPIAllreduce::Allreduce();
+  AllreduceOp::Allreduce();
 }
 
-CUDACustomAllreduce::CUDACustomAllreduce(CUDAContext* context, HorovodGlobalState* global_state)
-: CUDAAllreduce(context, global_state) {}
+CUDACustomAllreduce::CUDACustomAllreduce(CUDAContext* context,
+                                         CommunicationContext* comm_context,
+                                         HorovodGlobalState* global_state)
+: CUDAAllreduce(context, comm_context, global_state) {}
 
 void CUDACustomAllreduce::Allreduce(std::vector<TensorTableEntry>& entries, std::vector<int32_t>& devices) {
   if (!OnGPU(entries)) {
-    MPIAllreduce::Allreduce();
+    AllreduceOp::Allreduce(entries, devices);
     return;
   }
 
@@ -216,7 +220,7 @@ void CUDAAllreduce::MemcpyInFusionBuffer(void* buffer_data_at_offset, TensorTabl
                    (size_t)e.tensor->size(), cudaMemcpyDeviceToDevice,
                    cuda_context_->streams[first_entry.device]))
   } else {
-    MPIAllreduce::MemcpyInFusionBuffer(buffer_data_at_offset, e, entries);
+    AllreduceOp::MemcpyInFusionBuffer(buffer_data_at_offset, e, entries);
   }
 }
 
@@ -230,7 +234,7 @@ void CUDAAllreduce::MemcpyOutFusionBuffer(void* buffer_data_at_offset, TensorTab
                    (size_t)e.tensor->size(), cudaMemcpyDeviceToDevice,
                    cuda_context_->streams[first_entry.device]))
   } else {
-    MPIAllreduce::MemcpyOutFusionBuffer(buffer_data_at_offset, e, entries);
+    AllreduceOp::MemcpyOutFusionBuffer(buffer_data_at_offset, e, entries);
   }
 }
 

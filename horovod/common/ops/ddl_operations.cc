@@ -38,6 +38,11 @@ DDL_Type GetDDLDataType(const std::shared_ptr<Tensor> tensor) {
   }
 }
 
+DDLAllreduce::DDLAllreduce(CUDAContext* cuda_context,
+                           CommunicationContext* comm_context,
+                           HorovodGlobalState* global_state) :
+                           CUDACustomAllreduce(cuda_context, comm_context, global_state) {}
+
 void DDLAllreduce::InitComm(std::vector<TensorTableEntry>& entries, std::vector<int32_t>& devices) {
   auto& timeline = global_state_->timeline;
   if (!global_state_->ddl_initialized) {

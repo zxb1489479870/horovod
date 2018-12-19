@@ -31,7 +31,8 @@ struct NCCLContext {
 
 class NCCLAllreduce : public CUDACustomAllreduce {
 public:
-  NCCLAllreduce(NCCLContext* nccl_context, CUDAContext* cuda_context, HorovodGlobalState* global_state);
+  NCCLAllreduce(NCCLContext* nccl_context, CUDAContext* cuda_context,
+                CommunicationContext* comm_context, HorovodGlobalState* global_state);
 
 protected:
   void InitComm(std::vector<TensorTableEntry>& entries, std::vector<int32_t>& devices) override;
@@ -42,7 +43,8 @@ protected:
 
 private:
   virtual std::vector<int32_t> GetDeviceMap(std::vector<int32_t>& devices);
-  virtual void SetCommStrategy(int& nccl_rank, int& nccl_size, MPI_Comm& nccl_id_bcast_comm);
+  virtual void SetCommStrategy(int& nccl_rank, int& nccl_size,
+                               CommunicationContext::Communicator& nccl_id_bcast_comm);
 
   NCCLContext* nccl_context_;
 };
@@ -59,7 +61,8 @@ protected:
 
 private:
   std::vector<int32_t> GetDeviceMap(std::vector<int32_t>& devices) override;
-  void SetCommStrategy(int& nccl_rank, int& nccl_size, MPI_Comm& nccl_id_bcast_comm) override;
+  void SetCommStrategy(int& nccl_rank, int& nccl_size,
+                       CommunicationContext::Communicator& nccl_id_bcast_comm) override;
 };
 
 } // namespace common

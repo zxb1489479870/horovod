@@ -14,7 +14,9 @@ namespace common {
 
 class DDLAllreduce : public CUDACustomAllreduce {
 public:
-  DDLAllreduce(CUDAContext* context, HorovodGlobalState* global_state);
+  DDLAllreduce(CUDAContext* cuda_context,
+               CommunicationContext* comm_context,
+               HorovodGlobalState* global_state);
 
 protected:
   void InitComm(std::vector<TensorTableEntry>& entries, std::vector<int32_t>& devices) override;
