@@ -21,7 +21,8 @@ enum DataType {
   HOROVOD_FLOAT32 = 7,
   HOROVOD_FLOAT64 = 8,
   HOROVOD_BOOL = 9,
-  HOROVOD_BYTE = 10
+  HOROVOD_BYTE = 10,
+  HOROVOD_NULL = 11,
 };
 
 const std::string& DataType_Name(DataType value) {
@@ -59,6 +60,9 @@ const std::string& DataType_Name(DataType value) {
     case HOROVOD_BYTE:
       static const std::string byte_("byte");
       return byte_;
+    case HOROVOD_NULL:
+      static const std::string null_("null");
+      return null_;
     default:
       static const std::string unknown("<unknown>");
       return unknown;

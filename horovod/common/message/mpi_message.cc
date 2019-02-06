@@ -15,8 +15,10 @@
 // =============================================================================
 
 #include "mpi_message.h"
-#include "wire/mpi_message_generated.h"
+
 #include <iostream>
+
+#include "../wire/mpi_message_generated.h"
 
 namespace horovod {
 namespace common {

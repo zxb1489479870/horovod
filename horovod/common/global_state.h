@@ -5,6 +5,8 @@
 #ifndef HOROVOD_GLOBAL_STATE_H
 #define HOROVOD_GLOBAL_STATE_H
 
+#include <thread>
+
 #include "fusion_buffer_manager.h"
 #include "parameter_manager.h"
 #include "timeline.h"
@@ -37,11 +39,6 @@ struct HorovodGlobalState {
 
   // Whether Horovod should finalize MPI (only if it has initialized it).
   bool should_finalize = false;
-
-  // Only exists on the coordinator node (rank zero). Maintains a count of
-  // how many nodes are ready to allreduce every tensor (keyed by tensor
-  // name) and time point when tensor started allreduce op.
-  std::unique_ptr<MessageTable> message_table;
 
   // Time point when coordinator last checked for stalled tensors.
   std::chrono::steady_clock::time_point last_stall_check;

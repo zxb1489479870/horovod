@@ -10,35 +10,55 @@
 
 #include "mpi.h"
 
-#include "common.h"
+#include "../common.h"
+#include "../global_state.h"
 #include "communication_context.h"
-#include "global_state.h"
 
 namespace horovod {
 namespace common {
 
+// Table for storing Tensor metadata on rank zero. This is used for error
+// checking, stall checking and size calculations, as well as determining
+// when a reduction is ready to be done (when all nodes are ready to do it).
+using MessageTable = std::unordered_map<
+    std::string,
+    std::tuple<std::vector<MPIRequest>, std::chrono::steady_clock::time_point>>;
+
 class MPIContext : public CommunicationContext {
 public:
   void Allreduce(const void* buffer_data, int64_t num_elements,
-                 TensorTableEntry& first_entry, const void* sendbuff=nullptr,
-                 Communicator comm=Communicator::GLOBAL) override;
+                 TensorTableEntry& first_entry, const void* sendbuff,
+                 Communicator comm) override;
+
+  void Allgatherv(const void *sendbuf, int sendcount, DataType sendtype,
+                  void *recvbuf, const int recvcounts[],
+                  const int displs[], DataType recvtype,
+                  Communicator comm) override;
 
   void Broadcast(const void* buffer_data, int64_t num_elements,
                  DataType dtype, int root_rank,
-                 Communicator comm=Communicator::GLOBAL) override;
+                 Communicator comm) override;
 
-  void Barrier(Communicator comm=Communicator::GLOBAL) override;
+  void Barrier(Communicator comm) override;
+
+  void AllocateSharedBuffer(int64_t window_size, int element_size, void* baseptr, Communicator comm) override;
+
+  void FreeSharedBuffer() override;
+
+  void QuerySharedBuffer(int rank, void* baseptr) override;
 
   void GetTypeSize(DataType dtype, int* out) override;
 
-  inline std::string AllreduceActivity() const {
+  inline std::string AllreduceActivity() const override {
     return MPI_ALLREDUCE;
   }
 
-private:
+  inline std::string BroadcastActivity() const override {
+    return MPI_BCAST;
+  }
+
   MPI_Datatype GetMPIDataType(std::shared_ptr<Tensor> tensor);
   MPI_Datatype GetMPIDataType(DataType dtype);
-
   MPI_Comm GetMPICommunicator(Communicator comm);
 
   // Queue of MPI requests waiting to be sent to the coordinator node.
@@ -60,6 +80,11 @@ private:
 
   // MPI Window used for shared memory allgather
   MPI_Win window;
+
+  // Only exists on the coordinator node (rank zero). Maintains a count of
+  // how many nodes are ready to allreduce every tensor (keyed by tensor
+  // name) and time point when tensor started allreduce op.
+  std::unique_ptr<MessageTable> message_table;
 };
 
 } // namespace common

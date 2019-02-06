@@ -20,6 +20,18 @@ void MPIContext::Allreduce(const void* buffer_data, int64_t num_elements,
   }
 }
 
+void MPIContext::Allgatherv(const void *sendbuf, int sendcount, DataType sendtype,
+                            void *recvbuf, const int recvcounts[],
+                            const int displs[], DataType recvtype,
+                            Communicator comm) {
+  int op = MPI_Allgatherv(sendbuf != nullptr ? sendbuf : MPI_IN_PLACE, sendcount, GetMPIDataType(sendtype),
+                          recvbuf, recvcounts, displs, GetMPIDataType(recvtype),
+                          GetMPICommunicator(comm));
+  if (op != MPI_SUCCESS) {
+    throw std::logic_error("MPI_Allgatherv failed, see MPI output for details.");
+  }
+}
+
 void MPIContext::Broadcast(const void* buffer_data, int64_t num_elements,
                            DataType dtype, int root_rank,
                            Communicator comm) {
@@ -38,6 +50,23 @@ void MPIContext::Barrier(Communicator comm) {
   if (op != MPI_SUCCESS) {
     throw std::logic_error("MPI_Barrier failed, see MPI output for details.");
   }
+}
+
+void MPIContext::AllocateSharedBuffer(int64_t window_size, int element_size, void* baseptr, Communicator comm) {
+  MPI_Win_allocate_shared(
+      window_size, element_size, MPI_INFO_NULL, GetMPICommunicator(comm),
+      baseptr, &window);
+}
+
+void MPIContext::FreeSharedBuffer() {
+  MPI_Win_fence(0, window);
+  MPI_Win_free(&window);
+}
+
+void MPIContext::QuerySharedBuffer(int rank, void* baseptr) {
+  int disp_unit;
+  MPI_Aint winsize;
+  MPI_Win_shared_query(window, rank, &winsize, &disp_unit, baseptr);
 }
 
 void MPIContext::GetTypeSize(DataType dtype, int* out) {
@@ -72,6 +101,8 @@ MPI_Datatype MPIContext::GetMPIDataType(const DataType dtype) {
       return MPI_C_BOOL;
     case HOROVOD_BYTE:
       return MPI_BYTE;
+    case HOROVOD_NULL:
+      return MPI_DATATYPE_NULL;
     default:
       throw std::logic_error("Type " + DataType_Name(dtype) +
                              " is not supported in MPI mode.");

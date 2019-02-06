@@ -17,7 +17,7 @@ namespace common {
 class AllreduceOp {
 public:
   AllreduceOp(CommunicationContext* comm_context, HorovodGlobalState* global_state);
-  virtual void Allreduce(std::vector<TensorTableEntry>& entries, std::vector<int32_t>& devices);
+  virtual void Allreduce(std::vector<TensorTableEntry>& entries, const std::vector<int32_t>& devices);
 
 protected:
   virtual void MemcpyInFusionBuffer(void* buffer_data_at_offset, TensorTableEntry& e,
@@ -26,6 +26,16 @@ protected:
                                      std::vector<TensorTableEntry>& entries);
   virtual void StreamSynchronize(std::vector<TensorTableEntry>& entries);
 
+  CommunicationContext* comm_context_;
+  HorovodGlobalState* global_state_;
+};
+
+class AllgatherOp {
+public:
+  AllgatherOp(CommunicationContext* comm_context, HorovodGlobalState* global_state);
+  virtual void Allgather(std::vector<TensorTableEntry>& entries, const std::vector<int64_t>& tensor_sizes);
+
+protected:
   CommunicationContext* comm_context_;
   HorovodGlobalState* global_state_;
 };
