@@ -7,9 +7,13 @@
 namespace horovod {
 namespace common {
 
+HorovodOp::HorovodOp(CommunicationContext* comm_context,
+                     HorovodGlobalState* global_state)
+                     : comm_context_(comm_context), global_state_(global_state) {}
+
 // Allreduce
 AllreduceOp::AllreduceOp(CommunicationContext* comm_context, HorovodGlobalState* global_state)
-    : comm_context_(comm_context), global_state_(global_state) {}
+                         : HorovodOp(comm_context, global_state) {}
 
 void AllreduceOp::Allreduce(std::vector<TensorTableEntry>& entries, const std::vector<int32_t>& devices) {
   auto& first_entry = entries[0];
@@ -83,7 +87,7 @@ void AllreduceOp::StreamSynchronize(std::vector<TensorTableEntry>& entries) {
 
 // Allgather
 AllgatherOp::AllgatherOp(CommunicationContext* comm_context, HorovodGlobalState* global_state)
-    : comm_context_(comm_context), global_state_(global_state) {}
+                         : HorovodOp(comm_context, global_state) {}
 
 void AllgatherOp::Allgather(std::vector<TensorTableEntry>& entries, const std::vector<int64_t>& tensor_sizes) {
   auto& timeline = global_state_->timeline;
@@ -253,6 +257,32 @@ void AllgatherOp::DoAllgather(std::vector<TensorTableEntry>& entries, int* recvc
   }
   delete[] entry_component_sizes;
   delete[] entry_component_offsets;
+}
+
+BroadcastOp::BroadcastOp(CommunicationContext *comm_context, HorovodGlobalState *global_state)
+                         : HorovodOp(comm_context, global_state) {}
+
+void BroadcastOp::Broadcast(std::vector<horovod::common::TensorTableEntry> &entries) {
+  assert(entries.size() == 1);
+  auto e = entries[0];
+
+  // On root rank, MPI_Bcast sends data, on other ranks it receives data.
+  void* data_ptr;
+  if (global_state_->rank == e.root_rank) {
+    data_ptr = (void*)e.tensor->data();
+  } else {
+    data_ptr = (void*)e.output->data();
+  }
+
+  auto& timeline = global_state_->timeline;
+  timeline.ActivityStartAll(entries, MPI_BCAST);
+  comm_context_->Broadcast(data_ptr, (int)e.tensor->shape().num_elements(),
+                           e.tensor->dtype(), e.root_rank,
+                           CommunicationContext::Communicator::GLOBAL);
+  timeline.ActivityEndAll(entries);
+
+  timeline.End(e.tensor_name, e.output);
+  e.callback(Status::OK());
 }
 
 HierarchicalAllgather::HierarchicalAllgather(CommunicationContext* comm_context,

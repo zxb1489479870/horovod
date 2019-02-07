@@ -431,30 +431,11 @@ void PerformOperation(TensorTable& tensor_table, MPIResponse response) {
 
   Status status;
   if (response.response_type() == MPIResponse::ALLGATHER) {
-    Allgather();
+    Allgather(entries);
   } else if (response.response_type() == MPIResponse::ALLREDUCE) {
-    Allreduce();
+    Allreduce(entries);
   } else if (response.response_type() == MPIResponse::BROADCAST) {
-    assert(entries.size() == 1);
-    auto e = entries[0];
-
-    // On root rank, MPI_Bcast sends data, on other ranks it receives data.
-    void* data_ptr;
-    if (horovod_global.rank == e.root_rank) {
-      data_ptr = (void*)e.tensor->data();
-    } else {
-      data_ptr = (void*)e.output->data();
-    }
-
-    timeline.ActivityStartAll(entries, MPI_BCAST);
-    MPI_CHECK(entries, "MPI_Bcast",
-              MPI_Bcast(data_ptr, (int)e.tensor->shape().num_elements(),
-                        horovod_global.GetMPIDataType(e.tensor), e.root_rank,
-                        horovod_global.mpi_comm))
-    timeline.ActivityEndAll(entries);
-
-    timeline.End(e.tensor_name, e.output);
-    e.callback(Status::OK());
+    Broadcast(entries);
   } else if (response.response_type() == MPIResponse::ERROR) {
     assert(entries.size() == 1);
     auto e = entries[0];
