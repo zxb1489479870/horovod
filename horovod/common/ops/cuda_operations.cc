@@ -58,11 +58,11 @@ CUDAAllreduce::CUDAAllreduce(CUDAContext* context,
                              HorovodGlobalState* global_state)
                              : AllreduceOp(comm_context, global_state), cuda_context_(context) {}
 
-void CUDAAllreduce::Allreduce(std::vector<TensorTableEntry>& entries, std::vector<int32_t>& devices) {
+void CUDAAllreduce::Allreduce(std::vector<TensorTableEntry>& entries, const std::vector<int32_t>& devices) {
   if (OnGPU(entries)) {
     InitCUDA(entries);
   }
-  AllreduceOp::Allreduce();
+  AllreduceOp::Allreduce(entries, devices);
 }
 
 CUDACustomAllreduce::CUDACustomAllreduce(CUDAContext* context,
@@ -70,7 +70,7 @@ CUDACustomAllreduce::CUDACustomAllreduce(CUDAContext* context,
                                          HorovodGlobalState* global_state)
 : CUDAAllreduce(context, comm_context, global_state) {}
 
-void CUDACustomAllreduce::Allreduce(std::vector<TensorTableEntry>& entries, std::vector<int32_t>& devices) {
+void CUDACustomAllreduce::Allreduce(std::vector<TensorTableEntry>& entries, const std::vector<int32_t>& devices) {
   if (!OnGPU(entries)) {
     AllreduceOp::Allreduce(entries, devices);
     return;

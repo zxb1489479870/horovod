@@ -85,7 +85,7 @@ public:
   CUDAAllreduce(CUDAContext* context,
                 CommunicationContext* comm_context,
                 HorovodGlobalState* global_state);
-  void Allreduce(std::vector<TensorTableEntry>& entries, std::vector<int32_t>& devices) override;
+  void Allreduce(std::vector<TensorTableEntry>& entries, const std::vector<int32_t>& devices) override;
 
 protected:
   void MemcpyInFusionBuffer(void* buffer_data_at_offset, TensorTableEntry& e,
@@ -105,7 +105,7 @@ public:
   CUDACustomAllreduce(CUDAContext* context,
                       CommunicationContext* comm_context,
                       HorovodGlobalState* global_state);
-  void Allreduce(std::vector<TensorTableEntry>& entries, std::vector<int32_t>& devices) override;
+  void Allreduce(std::vector<TensorTableEntry>& entries, const std::vector<int32_t>& devices) override;
 
 protected:
   virtual void InitComm(std::vector<TensorTableEntry>& entries, std::vector<int32_t>& devices) = 0;
