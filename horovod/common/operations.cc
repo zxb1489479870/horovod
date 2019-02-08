@@ -33,6 +33,7 @@
 #include "message/mpi_message.h"
 #include "operations.h"
 #include "ops/mpi_operations.h"
+#include "ops/operation_manager.h"
 #include "timeline.h"
 
 /*
@@ -71,6 +72,8 @@ HorovodGlobalState horovod_global;
 
 MPIContext mpi_context;
 
+std::unique_ptr<OperationManager> op_manager;
+
 // For clarify in argument lists.
 #define RANK_ZERO 0
 
@@ -91,6 +94,36 @@ const Status DUPLICATE_NAME_ERROR = Status::InvalidArgument(
     "Requested to allreduce, allgather, or broadcast a tensor with the same "
     "name as another tensor that is currently being processed.  If you want "
     "to request another tensor, use a different tensor name.");
+
+OperationManager* CreateOperationManager(CommunicationContext& ctx, HorovodGlobalState& state) {
+  std::shared_ptr<AllreduceOp> allreduce_op = std::make_shared<AllreduceOp>(new AllreduceOp(&ctx, &state));
+  std::shared_ptr<AllgatherOp> allgather_op = std::make_shared<AllgatherOp>(new AllgatherOp(&ctx, &state));
+  std::shared_ptr<BroadcastOp> broadcast_op = std::make_shared<BroadcastOp>(new BroadcastOp(&ctx, &state));
+  std::shared_ptr<AllreduceOp> hierarchical_allreduce_op;
+  std::shared_ptr<AllreduceOp> hierarchical_allgather_op;
+
+#if HAVE_CUDA
+#if HOROVOD_GPU_ALLREDUCE == 'M'
+  allreduce_op = std::make_shared<AllreduceOp>(new CUDAAllreduce(&cuda_ctx, &ctx, &state));
+
+#else
+  #if HAVE_NCCL && HOROVOD_GPU_ALLREDUCE == 'N'
+    allreduce_op = std::make_shared<AllreduceOp>(new NCCLAllreduce(&nccl_ctx, &cuda_ctx, &ctx, &state));
+    hierarchical_allreduce_op = std::make_shared<AllreduceOp>(
+        new HierarchicalAllreduce(&nccl_ctx, &cuda_ctx, &ctx, &state));
+
+  #elif HAVE_DDL && HOROVOD_GPU_ALLREDUCE == 'D'
+    allreduce_op = std::make_shared<AllreduceOp>(new DDLAllreduce(&cuda_ctx, &ctx, &state));
+  #endif
+
+  hierarchical_allgather_op = std::make_shared<AllgatherOp>(new HierarchicalAllgather());
+#endif
+#endif
+
+  return new OperationManager(&state.param_manager,
+                              allreduce_op, allgather_op, broadcast_op,
+                              hierarchical_allreduce_op, hierarchical_allgather_op);
+}
 
 // Store the MPIRequest for a name, and return whether the total count of
 // MPIRequests for that tensor is now equal to the MPI size (and thus we are
@@ -431,11 +464,11 @@ void PerformOperation(TensorTable& tensor_table, MPIResponse response) {
 
   Status status;
   if (response.response_type() == MPIResponse::ALLGATHER) {
-    Allgather(entries);
+    op_manager->GetAllgatherOp()->Allgather(entries, tensor_sizes);
   } else if (response.response_type() == MPIResponse::ALLREDUCE) {
-    Allreduce(entries);
+    op_manager->GetAllreduceOp()->Allreduce(entries, devices);
   } else if (response.response_type() == MPIResponse::BROADCAST) {
-    Broadcast(entries);
+    op_manager->GetBroadcastOp()->Broadcast(entries);
   } else if (response.response_type() == MPIResponse::ERROR) {
     assert(entries.size() == 1);
     auto e = entries[0];
@@ -723,6 +756,8 @@ void BackgroundThreadLoop(HorovodGlobalState& state, MPIContext& ctx) {
   if (is_coordinator) {
     ctx.message_table = std::unique_ptr<MessageTable>(new MessageTable());
   }
+
+  op_manager.reset(CreateOperationManager(ctx, state));
 
   // Signal that initialization is completed.
   state.initialization_done = true;
