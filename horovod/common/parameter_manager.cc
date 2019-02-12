@@ -14,6 +14,7 @@
 // =============================================================================
 
 #include "parameter_manager.h"
+#include "logging.h"
 
 #include <algorithm>
 #include <cmath>
@@ -27,7 +28,7 @@ namespace common {
 #define WARMUPS 3
 #define CYCLES_PER_SAMPLE 10
 #define BAYES_OPT_MAX_SAMPLES 20
-#define GAUSSIAN_PROCESS_NOISE 0.2
+#define GAUSSIAN_PROCESS_NOISE 0.8
 
 Eigen::VectorXd CreateVector(double x1, double x2) {
   Eigen::VectorXd v(2);
@@ -86,6 +87,9 @@ void ParameterManager::Initialize(int32_t rank, int32_t root_rank, MPI_Comm mpi_
   rank_ = rank;
   root_rank_ = root_rank;
   mpi_comm_ = mpi_comm;
+  if (rank_ == root_rank) {
+    LOG(INFO) << "Autotuner: Tunable params [hierarchical_allreduce,hierarchical_allgather,cycle_time_ms,tensor_fusion_threshold] score";
+  }
   if (rank_ == root_rank && !file_name.empty()) {
     file_.open(file_name, std::ios::out | std::ios::trunc);
     if (file_.good()) {
@@ -138,24 +142,26 @@ void ParameterManager::SetCycleTimeMs(double value, bool fixed) {
   joint_params_.SetValue(cycle_time_ms, value, fixed);
 }
 
-void ParameterManager::Update(const std::vector<std::string>& tensor_names, int64_t bytes, double microseconds) {
+void ParameterManager::Update(const std::vector<std::string>& tensor_names, int64_t bytes) {
   if (!active_) {
     return;
   }
 
   for (const std::string& tensor_name : tensor_names) {
     int32_t cycle = tensor_counts_[tensor_name]++;
-    if (cycle > sample_ * CYCLES_PER_SAMPLE) {
-      scores_[sample_] = total_bytes_ / total_microseconds_;
+    if (cycle >= (sample_ + 1) * CYCLES_PER_SAMPLE) {
+      auto now = std::chrono::steady_clock::now();
+      double duration = std::chrono::duration_cast<std::chrono::microseconds>(now - last_sample_start_).count();
+      scores_[sample_] = total_bytes_ / duration;
+
       total_bytes_ = 0;
-      total_microseconds_ = 0;
-      sample_++;
+      last_sample_start_ = now;
+      ++sample_;
       break;
     }
   }
 
   total_bytes_ += bytes;
-  total_microseconds_ += microseconds;
 
   if (sample_ >= SAMPLES) {
     std::sort(scores_, scores_ + SAMPLES);
@@ -169,7 +175,7 @@ void ParameterManager::Tune(double score) {
     // Ignore this score as we're still warming up.
     warmup_remaining_--;
     if (rank_ == root_rank_) {
-      std::cerr << "HOROVOD_AUTOTUNER: WARMUP DONE (" << warmup_remaining_ << " remaining)" << std::endl;
+      LOG(INFO) << "Autotuner: Warming up (" << warmup_remaining_ << " remaining)";
     }
   } else {
     // Log the last parameter values before updating.
@@ -178,8 +184,12 @@ void ParameterManager::Tune(double score) {
     // Only do the tuning on the coordinator to ensure consistency.
     if (rank_ == root_rank_) {
       bool finished_tuning = true;
+      double best_score = score;
       for (auto* param : parameter_chain_) {
-        bool finished = param->Tune(score);
+        double new_best_score;
+        bool finished = param->Tune(best_score, &new_best_score);
+        best_score = new_best_score;
+
         if (!finished) {
           finished_tuning = false;
           break;
@@ -237,20 +247,19 @@ void ParameterManager::SyncParams() {
 
 void ParameterManager::Reset() {
   total_bytes_ = 0;
-  total_microseconds_ = 0;
+  last_sample_start_ = std::chrono::steady_clock::now();
   tensor_counts_.clear();
   sample_ = 0;
 }
 
 void ParameterManager::LogParameters(double score) {
   if (rank_ == root_rank_) {
-    std::cerr << "HOROVOD_AUTOTUNER: ["
+    LOG(INFO) << "Autotuner: ["
               << hierarchical_allreduce_.Value() << ", "
               << hierarchical_allgather_.Value() << ", "
               << joint_params_.Value(cycle_time_ms) << " ms, "
               << joint_params_.Value(fusion_buffer_threshold_mb) << " mb] "
-              << score
-              << std::endl;
+              << score;
     if (writing_ && file_.good()) {
       file_ << hierarchical_allreduce_.Value() << ","
             << hierarchical_allgather_.Value() << ","
@@ -264,13 +273,12 @@ void ParameterManager::LogParameters(double score) {
 
 void ParameterManager::LogBestParameters() {
   if (rank_ == root_rank_) {
-    std::cerr << "HOROVOD_AUTOTUNER: BEST ["
+    LOG(INFO) << "Autotuner: Best params ["
               << hierarchical_allreduce_.BestValue() << ", "
               << hierarchical_allgather_.BestValue() << ", "
               << joint_params_.BestValue(cycle_time_ms) << " ms, "
               << joint_params_.BestValue(fusion_buffer_threshold_mb) << " mb] "
-              << hierarchical_allreduce_.BestScore()
-              << std::endl;
+              << hierarchical_allreduce_.BestScore();
     if (writing_ && file_.good()) {
       file_ << hierarchical_allreduce_.BestValue() << ","
             << hierarchical_allgather_.BestValue() << ","
@@ -292,8 +300,10 @@ ParameterManager::TunableParameter<T>::TunableParameter(T initial_value) :
     tunable_(true) {}
 
 template <class T>
-bool ParameterManager::TunableParameter<T>::Tune(double score) {
+bool ParameterManager::TunableParameter<T>::Tune(double score, double* best_score) {
   UpdateBestValue(score);
+  *best_score = best_score_;
+
   if (!tunable_) {
     return true;
   }
@@ -353,7 +363,7 @@ ParameterManager::CategoricalParameter<T>::CategoricalParameter(std::vector<T> v
 
 template <class T>
 void ParameterManager::CategoricalParameter<T>::OnTune(double score, T& value) {
-  index_++;
+  ++index_;
   if (index_ < values_.size()) {
     value = values_[index_];
   }
@@ -411,7 +421,7 @@ double ParameterManager::BayesianParameter::BestValue(BayesianVariable variable)
 void ParameterManager::BayesianParameter::OnTune(double score, Eigen::VectorXd& value) {
   bayes_->AddSample(value, score);
 
-  iteration_++;
+  ++iteration_;
   if (iteration_ < test_points_.size()) {
     value = FilterTestPoint(iteration_);
   } else {
@@ -437,7 +447,7 @@ void ParameterManager::BayesianParameter::ResetBayes() {
     if (fixed_values_.find(var.variable) == fixed_values_.end()) {
       bounds.push_back(var.bounds);
       index_[var.variable] = j;
-      j++;
+      ++j;
     }
   }
 
@@ -450,11 +460,11 @@ Eigen::VectorXd ParameterManager::BayesianParameter::FilterTestPoint(int i) {
   Eigen::VectorXd filtered_point(test_point.size() - fixed_values_.size());
 
   int k = 0;
-  for (int j = 0; j < test_point.size(); j++) {
+  for (int j = 0; j < test_point.size(); ++j) {
     BayesianVariable variable = variables_[j].variable;
     if (fixed_values_.find(variable) == fixed_values_.end()) {
       filtered_point(k) = test_point(j);
-      k++;
+      ++k;
     }
   }
 

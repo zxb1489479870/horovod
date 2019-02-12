@@ -49,6 +49,9 @@ struct HorovodGlobalState {
   // Timeline writer.
   Timeline timeline;
 
+  // Flag indicating whether to mark cycles in the timeline.
+  bool mark_cycles_in_timeline = false;
+
   ParameterManager param_manager;
 
   // Encapsulates the fusion buffers, handles resizing and auto-tuning of buffer size.
