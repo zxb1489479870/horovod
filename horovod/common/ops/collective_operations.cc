@@ -15,7 +15,7 @@ HorovodOp::HorovodOp(CommunicationContext* comm_context,
 AllreduceOp::AllreduceOp(CommunicationContext* comm_context, HorovodGlobalState* global_state)
                          : HorovodOp(comm_context, global_state) {}
 
-void AllreduceOp::Allreduce(std::vector<TensorTableEntry>& entries, const std::vector<int32_t>& devices) {
+Status AllreduceOp::Execute(std::vector<TensorTableEntry>& entries, const HorovodResponse& response) {
   auto& first_entry = entries[0];
   auto& timeline = global_state_->timeline;
 
@@ -64,10 +64,7 @@ void AllreduceOp::Allreduce(std::vector<TensorTableEntry>& entries, const std::v
     timeline.ActivityEndAll(entries);
   }
 
-  for (auto& e : entries) {
-    timeline.End(e.tensor_name, e.output);
-    e.callback(Status::OK());
-  }
+  return Status::OK();
 }
 
 void AllreduceOp::MemcpyInFusionBuffer(void* buffer_data_at_offset, TensorTableEntry& e,
@@ -89,7 +86,7 @@ void AllreduceOp::StreamSynchronize(std::vector<TensorTableEntry>& entries) {
 AllgatherOp::AllgatherOp(CommunicationContext* comm_context, HorovodGlobalState* global_state)
                          : HorovodOp(comm_context, global_state) {}
 
-void AllgatherOp::Allgather(std::vector<TensorTableEntry>& entries, const std::vector<int64_t>& tensor_sizes) {
+Status AllgatherOp::Execute(std::vector<TensorTableEntry>& entries, const HorovodResponse& response) {
   auto& timeline = global_state_->timeline;
   
   // Sizes of subcomponents of each entry from all ranks
@@ -123,6 +120,7 @@ void AllgatherOp::Allgather(std::vector<TensorTableEntry>& entries, const std::v
     // Copy tensor sizes from the MPI response into a vector of int64_t
     // and compute total size.  This is size of first dimension.
     int64_t total_entry_dimension_size = 0;
+    const auto& tensor_sizes = response.tensor_sizes();
     for (int rc = 0; rc < global_state_->size; ++rc) {
       auto component_size = tensor_sizes[ec * global_state_->size + rc];
       total_entry_dimension_size += component_size;
@@ -139,9 +137,7 @@ void AllgatherOp::Allgather(std::vector<TensorTableEntry>& entries, const std::v
 
     Status status = e.context->AllocateOutput(output_shape, &e.output);
     if (!status.ok()) {
-      timeline.End(e.tensor_name, nullptr);
-      e.callback(status);
-      return;
+      return status;
     }
   }
   timeline.ActivityEndAll(entries);
@@ -178,10 +174,7 @@ void AllgatherOp::Allgather(std::vector<TensorTableEntry>& entries, const std::v
               total_size, element_size);
 
 
-  for (auto& e : entries) {
-    timeline.End(e.tensor_name, e.output);
-    e.callback(Status::OK());
-  }
+  return Status::OK();
 }
 
 void AllgatherOp::DoAllgather(std::vector<TensorTableEntry>& entries, int* recvcounts, int* displcmnts,
@@ -262,7 +255,7 @@ void AllgatherOp::DoAllgather(std::vector<TensorTableEntry>& entries, int* recvc
 BroadcastOp::BroadcastOp(CommunicationContext *comm_context, HorovodGlobalState *global_state)
                          : HorovodOp(comm_context, global_state) {}
 
-void BroadcastOp::Broadcast(std::vector<horovod::common::TensorTableEntry> &entries) {
+Status BroadcastOp::Execute(std::vector<TensorTableEntry> &entries, const HorovodResponse& response) {
   assert(entries.size() == 1);
   auto e = entries[0];
 
@@ -281,8 +274,7 @@ void BroadcastOp::Broadcast(std::vector<horovod::common::TensorTableEntry> &entr
                            CommunicationContext::Communicator::GLOBAL);
   timeline.ActivityEndAll(entries);
 
-  timeline.End(e.tensor_name, e.output);
-  e.callback(Status::OK());
+  return Status::OK();
 }
 
 HierarchicalAllgather::HierarchicalAllgather(CommunicationContext* comm_context,

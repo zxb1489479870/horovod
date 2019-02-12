@@ -19,7 +19,7 @@ public:
                HorovodGlobalState* global_state);
 
 protected:
-  void InitComm(std::vector<TensorTableEntry>& entries, std::vector<int32_t>& devices) override;
+  void InitComm(std::vector<TensorTableEntry>& entries, const std::vector<int32_t>& devices) override;
   void CustomAllreduce(std::vector<TensorTableEntry>& entries,
                        cudaStream_t& stream, std::queue<std::pair<std::string, cudaEvent_t>>& event_queue,
                        const void* fused_input_data, void* buffer_data,

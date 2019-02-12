@@ -15,45 +15,6 @@
 namespace horovod {
 namespace common {
 
-#define CUDA_CHECK(entries, timeline, op_name, op)                             \
-  {                                                                            \
-    auto cuda_result = (op);                                                   \
-    if (cuda_result != cudaSuccess) {                                          \
-      for (auto& e : (entries)) {                                              \
-        timeline.End(e.tensor_name, nullptr);                                  \
-        e.callback(Status::UnknownError(std::string(op_name) + " failed: " +   \
-                                        cudaGetErrorString(cuda_result)));     \
-      }                                                                        \
-      return;                                                                  \
-    }                                                                          \
-  }
-
-#define RECORD_EVENT(entries, timeline, event_queue, name, stream)                    \
-  {                                                                                   \
-    cudaEvent_t event;                                                                \
-    CUDA_CHECK(entries, timeline, "GetCudaEvent", GetCudaEvent(&event))               \
-    CUDA_CHECK(entries, timeline, "cudaEventRecord", cudaEventRecord(event, stream))  \
-    (event_queue).emplace(name, event);                                               \
-  }
-
-#define WAIT_FOR_EVENTS(entries, timeline, event_queue)                               \
-  {                                                                                   \
-    while (!(event_queue).empty()) {                                                  \
-      std::string name;                                                               \
-      cudaEvent_t event;                                                              \
-      std::tie(name, event) = (event_queue).front();                                  \
-      (event_queue).pop();                                                            \
-      if (name != "") {                                                               \
-        timeline.ActivityStartAll(entries, name);                                     \
-      }                                                                               \
-      CUDA_CHECK(entries, timeline, "cudaEventSynchronize", cudaEventSynchronize(event)) \
-      if (name != "") {                                                               \
-        timeline.ActivityEndAll(entries);                                             \
-      }                                                                               \
-      CUDA_CHECK(entries, timeline, "ReleaseCudaEvent", ReleaseCudaEvent(event))         \
-    }                                                                                 \
-  }
-
 struct CUDAContext {
   cudaError_t GetCudaEvent(cudaEvent_t* event);
 
@@ -78,6 +39,13 @@ struct CUDAContext {
   // We reuse CUDA events as it appears that their creation carries non-zero cost.
   std::unordered_map<int, std::queue<cudaEvent_t>> cuda_events;
   std::mutex cuda_events_mutex;
+
+  void ErrorCheck(std::string op_name, cudaError_t cuda_result);
+
+  void RecordEvent(std::queue<std::pair<std::string, cudaEvent_t>>& event_queue, std::string name, cudaStream_t stream);
+
+  void WaitForEvents(std::queue<std::pair<std::string, cudaEvent_t>>& event_queue,
+                     std::vector<TensorTableEntry>& entries, Timeline& timeline);
 };
 
 class CUDAAllreduce : public AllreduceOp {
@@ -85,7 +53,7 @@ public:
   CUDAAllreduce(CUDAContext* context,
                 CommunicationContext* comm_context,
                 HorovodGlobalState* global_state);
-  void Allreduce(std::vector<TensorTableEntry>& entries, const std::vector<int32_t>& devices) override;
+  Status Execute(std::vector<TensorTableEntry>& entries, const HorovodResponse& response) override;
 
 protected:
   void MemcpyInFusionBuffer(void* buffer_data_at_offset, TensorTableEntry& e,
@@ -105,10 +73,10 @@ public:
   CUDACustomAllreduce(CUDAContext* context,
                       CommunicationContext* comm_context,
                       HorovodGlobalState* global_state);
-  void Allreduce(std::vector<TensorTableEntry>& entries, const std::vector<int32_t>& devices) override;
+  Status Execute(std::vector<TensorTableEntry>& entries, const HorovodResponse& response) override;
 
 protected:
-  virtual void InitComm(std::vector<TensorTableEntry>& entries, std::vector<int32_t>& devices) = 0;
+  virtual void InitComm(std::vector<TensorTableEntry>& entries, const std::vector<int32_t>& devices) = 0;
   virtual void CustomAllreduce(std::vector<TensorTableEntry>& entries,
                                cudaStream_t& stream, std::queue<std::pair<std::string, cudaEvent_t>>& event_queue,
                                const void* fused_input_data, void* buffer_data,

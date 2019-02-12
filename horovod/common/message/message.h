@@ -47,6 +47,10 @@ public:
     ERROR = 3
   };
 
+  virtual const std::vector<int32_t>& devices() const = 0;
+
+  virtual const std::vector<int64_t>& tensor_sizes() const = 0;
+
   static const std::string& ResponseType_Name(ResponseType value);
 };
 

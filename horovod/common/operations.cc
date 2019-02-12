@@ -494,18 +494,24 @@ void PerformOperation(TensorTable& tensor_table, MPIResponse response) {
   }
 
   Status status;
-  if (response.response_type() == MPIResponse::ALLGATHER) {
-    op_manager->GetAllgatherOp()->Allgather(entries, response.tensor_sizes());
-  } else if (response.response_type() == MPIResponse::ALLREDUCE) {
-    op_manager->GetAllreduceOp()->Allreduce(entries, response.devices());
-  } else if (response.response_type() == MPIResponse::BROADCAST) {
-    op_manager->GetBroadcastOp()->Broadcast(entries);
-  } else if (response.response_type() == MPIResponse::ERROR) {
-    assert(entries.size() == 1);
-    auto e = entries[0];
+  try {
+    if (response.response_type() == MPIResponse::ALLGATHER) {
+      status = op_manager->GetAllgatherOp()->Execute(entries, response);
+    } else if (response.response_type() == MPIResponse::ALLREDUCE) {
+      status = op_manager->GetAllreduceOp()->Execute(entries, response);
+    } else if (response.response_type() == MPIResponse::BROADCAST) {
+      status = op_manager->GetBroadcastOp()->Execute(entries, response);
+    } else if (response.response_type() == MPIResponse::ERROR) {
+      assert(entries.size() == 1);
+      auto e = entries[0];
+      status = Status::PreconditionError(response.error_message());
+    }
+  } catch (const std::exception& ex) {
+    status = Status::UnknownError(ex.what());
+  }
 
-    status = Status::PreconditionError(response.error_message());
-    timeline.End(e.tensor_name, nullptr);
+  for (auto& e : entries) {
+    timeline.End(e.tensor_name, status.ok() ? e.output : nullptr);
     e.callback(status);
   }
 }
@@ -623,9 +629,8 @@ void BackgroundThreadLoop(HorovodGlobalState& state, MPIContext& ctx) {
                    &work_group);
     MPI_Comm_create_group(MPI_COMM_WORLD, work_group, 0, &(ctx.mpi_comm));
     if (ctx.mpi_comm == MPI_COMM_NULL) {
-      std::cerr << "WARNING: Unable to create Horovod communicator, using "
-                   "MPI_COMM_WORLD instead."
-                << std::endl;
+      LOG(WARNING) << "WARNING: Unable to create Horovod communicator, using "
+                      "MPI_COMM_WORLD instead.";
       ctx.mpi_comm = MPI_COMM_WORLD;
     }
     MPI_Group_free(&world_group);

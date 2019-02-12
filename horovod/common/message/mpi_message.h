@@ -107,14 +107,14 @@ public:
   const std::string& error_message() const;
   void set_error_message(const std::string& value);
 
-  const std::vector<int32_t>& devices() const;
+  const std::vector<int32_t>& devices() const override;
   void set_devices(const std::vector<int32_t>& value);
   void add_device(int32_t value);
 
   // Empty unless response_type is ALLGATHER.
   // These tensor sizes are the dimension zero sizes of all the input matrices,
   // indexed by the rank.
-  const std::vector<int64_t>& tensor_sizes() const;
+  const std::vector<int64_t>& tensor_sizes() const override;
   void set_tensor_sizes(const std::vector<int64_t>& value);
   void add_tensor_size(int64_t value);
 
