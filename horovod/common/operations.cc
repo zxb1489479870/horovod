@@ -96,27 +96,27 @@ const Status DUPLICATE_NAME_ERROR = Status::InvalidArgument(
     "to request another tensor, use a different tensor name.");
 
 OperationManager* CreateOperationManager(CommunicationContext& ctx, HorovodGlobalState& state) {
-  std::shared_ptr<AllreduceOp> allreduce_op = std::make_shared<AllreduceOp>(new AllreduceOp(&ctx, &state));
-  std::shared_ptr<AllgatherOp> allgather_op = std::make_shared<AllgatherOp>(new AllgatherOp(&ctx, &state));
-  std::shared_ptr<BroadcastOp> broadcast_op = std::make_shared<BroadcastOp>(new BroadcastOp(&ctx, &state));
+  std::shared_ptr<AllreduceOp> allreduce_op(new AllreduceOp(&ctx, &state));
+  std::shared_ptr<AllgatherOp> allgather_op(new AllgatherOp(&ctx, &state));
+  std::shared_ptr<BroadcastOp> broadcast_op(new BroadcastOp(&ctx, &state));
   std::shared_ptr<AllreduceOp> hierarchical_allreduce_op;
-  std::shared_ptr<AllreduceOp> hierarchical_allgather_op;
+  std::shared_ptr<AllgatherOp> hierarchical_allgather_op;
 
 #if HAVE_CUDA
 #if HOROVOD_GPU_ALLREDUCE == 'M'
-  allreduce_op = std::make_shared<AllreduceOp>(new CUDAAllreduce(&cuda_ctx, &ctx, &state));
+  allreduce_op.reset(new CUDAAllreduce(&cuda_ctx, &ctx, &state));
 
 #else
   #if HAVE_NCCL && HOROVOD_GPU_ALLREDUCE == 'N'
-    allreduce_op = std::make_shared<AllreduceOp>(new NCCLAllreduce(&nccl_ctx, &cuda_ctx, &ctx, &state));
-    hierarchical_allreduce_op = std::make_shared<AllreduceOp>(
+    allreduce_op.reset(new NCCLAllreduce(&nccl_ctx, &cuda_ctx, &ctx, &state));
+    hierarchical_allreduce_op.reset(
         new HierarchicalAllreduce(&nccl_ctx, &cuda_ctx, &ctx, &state));
 
   #elif HAVE_DDL && HOROVOD_GPU_ALLREDUCE == 'D'
-    allreduce_op = std::make_shared<AllreduceOp>(new DDLAllreduce(&cuda_ctx, &ctx, &state));
+    allreduce_op.reset(new DDLAllreduce(&cuda_ctx, &ctx, &state));
   #endif
 
-  hierarchical_allgather_op = std::make_shared<AllgatherOp>(new HierarchicalAllgather());
+  hierarchical_allgather_op.reset(new HierarchicalAllgather());
 #endif
 #endif
 
@@ -180,9 +180,9 @@ MPIResponse ConstructMPIResponse(std::unique_ptr<MessageTable>& message_table,
     if (data_type != request_type) {
       error = true;
       error_message_stream << "Mismatched data types: One rank had type "
-                           << MPIDataType_Name(data_type)
+                           << DataType_Name(data_type)
                            << ", but another rank had type "
-                           << MPIDataType_Name(request_type) << ".";
+                           << DataType_Name(request_type) << ".";
       break;
     }
   }
@@ -464,9 +464,9 @@ void PerformOperation(TensorTable& tensor_table, MPIResponse response) {
 
   Status status;
   if (response.response_type() == MPIResponse::ALLGATHER) {
-    op_manager->GetAllgatherOp()->Allgather(entries, tensor_sizes);
+    op_manager->GetAllgatherOp()->Allgather(entries, response.tensor_sizes());
   } else if (response.response_type() == MPIResponse::ALLREDUCE) {
-    op_manager->GetAllreduceOp()->Allreduce(entries, devices);
+    op_manager->GetAllreduceOp()->Allreduce(entries, response.devices());
   } else if (response.response_type() == MPIResponse::BROADCAST) {
     op_manager->GetBroadcastOp()->Broadcast(entries);
   } else if (response.response_type() == MPIResponse::ERROR) {
@@ -481,10 +481,10 @@ void PerformOperation(TensorTable& tensor_table, MPIResponse response) {
 
 // Report Tensors that were submitted to be reduced, gathered or broadcasted by
 // some ranks but not others and are waiting for long time to get processed.
-void CheckForStalledTensors(HorovodGlobalState& state) {
+void CheckForStalledTensors(HorovodGlobalState& state, MPIContext& ctx) {
   bool preamble = false;
   auto now = std::chrono::steady_clock::now();
-  for (auto& m : *state.message_table) {
+  for (auto& m : *ctx.message_table) {
     auto tensor_name = m.first;
     std::vector<MPIRequest>& messages = std::get<0>(m.second);
     std::chrono::steady_clock::time_point start_at = std::get<1>(m.second);
@@ -549,7 +549,7 @@ void CheckForStalledTensors(HorovodGlobalState& state) {
 //      in the same order, so we cannot dispatch one thread per tensor,
 //      otherwise we may end up dispatching many blocked threads and never make
 //      progress if we have a thread pool limit.
-bool RunLoopOnce(HorovodGlobalState& state, bool is_coordinator);
+bool RunLoopOnce(HorovodGlobalState& state, MPIContext& ctx, bool is_coordinator);
 void BackgroundThreadLoop(HorovodGlobalState& state, MPIContext& ctx) {
   // Initialize MPI if it was not initialized. This must happen on the
   // background thread, since not all MPI implementations support being called
@@ -763,7 +763,7 @@ void BackgroundThreadLoop(HorovodGlobalState& state, MPIContext& ctx) {
   state.initialization_done = true;
 
   // Iterate until shutdown.
-  while (RunLoopOnce(state, is_coordinator))
+  while (RunLoopOnce(state, ctx, is_coordinator))
     ;
 
   // Signal that shutdown has been requested.
@@ -1056,7 +1056,7 @@ bool RunLoopOnce(HorovodGlobalState& state, MPIContext& ctx, bool is_coordinator
     if (state.perform_stall_check &&
         std::chrono::steady_clock::now() - state.last_stall_check >
             STALL_WARNING_TIME) {
-      CheckForStalledTensors(state);
+      CheckForStalledTensors(state, ctx);
       state.last_stall_check = std::chrono::steady_clock::now();
     }
 
@@ -1135,7 +1135,7 @@ void InitializeHorovodOnce(const int* ranks, int nranks) {
     horovod_global.initialization_done = false;
 
     horovod_global.background_thread =
-        std::thread(BackgroundThreadLoop, std::ref(horovod_global));
+        std::thread(BackgroundThreadLoop, std::ref(horovod_global), std::ref(mpi_context));
   }
 
   // Wait to ensure that the background thread has finished initializing MPI.

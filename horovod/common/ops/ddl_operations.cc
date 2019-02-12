@@ -33,7 +33,7 @@ DDL_Type GetDDLDataType(const std::shared_ptr<Tensor> tensor) {
     case HOROVOD_FLOAT32:
       return DDL_TYPE_FLOAT;
     default:
-      throw std::logic_error("Type " + MPIDataType_Name(tensor->dtype()) +
+      throw std::logic_error("Type " + DataType_Name(tensor->dtype()) +
                              " is not supported in DDL mode.");
   }
 }

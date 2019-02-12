@@ -25,8 +25,6 @@
 namespace horovod {
 namespace common {
 
-const std::string& MPIDataType_Name(DataType value);
-
 // An MPIRequest is a message sent from a rank greater than zero to the
 // coordinator (rank zero), informing the coordinator of an operation that
 // the rank wants to do and the tensor that it wants to apply the operation to.

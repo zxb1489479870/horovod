@@ -19,6 +19,7 @@ public:
                    std::shared_ptr<BroadcastOp> broadcast_op,
                    std::shared_ptr<AllreduceOp> hierarchical_allreduce_op,
                    std::shared_ptr<AllgatherOp> hierarchical_allgather_op);
+  virtual ~OperationManager()=default;
 
   std::shared_ptr<AllreduceOp> GetAllreduceOp() const;
 

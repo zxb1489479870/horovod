@@ -194,7 +194,7 @@ void Timeline::End(const std::string& tensor_name, const std::shared_ptr<Tensor>
 
   std::stringstream args;
   if (tensor != nullptr) {
-    args << "\"dtype\": \"" << MPIDataType_Name(tensor->dtype()) << "\"";
+    args << "\"dtype\": \"" << DataType_Name(tensor->dtype()) << "\"";
     args << ", \"shape\": \"" << tensor->shape().DebugString() << "\"";
   }
   WriteEvent(tensor_name, 'E', "", args.str());

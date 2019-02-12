@@ -7,9 +7,9 @@
 
 #include <iostream>
 
-#include "common.h"
+#include "../common.h"
+#include "../global_state.h"
 #include "communication_context.h"
-#include "global_state.h"
 
 namespace horovod {
 namespace common {
@@ -26,6 +26,8 @@ protected:
 class AllreduceOp : public HorovodOp {
 public:
   AllreduceOp(CommunicationContext* comm_context, HorovodGlobalState* global_state);
+  virtual ~AllreduceOp()=default;
+
   virtual void Allreduce(std::vector<TensorTableEntry>& entries, const std::vector<int32_t>& devices);
 
 protected:
@@ -39,6 +41,8 @@ protected:
 class AllgatherOp : public HorovodOp {
 public:
   AllgatherOp(CommunicationContext* comm_context, HorovodGlobalState* global_state);
+  virtual ~AllgatherOp()=default;
+
   virtual void Allgather(std::vector<TensorTableEntry>& entries, const std::vector<int64_t>& tensor_sizes);
 
 protected:
@@ -50,6 +54,8 @@ protected:
 class BroadcastOp : public HorovodOp {
 public:
   BroadcastOp(CommunicationContext* comm_context, HorovodGlobalState* global_state);
+  virtual ~BroadcastOp()=default;
+
   virtual void Broadcast(std::vector<TensorTableEntry>& entries);
 };
 
