@@ -101,6 +101,7 @@ OperationManager* CreateOperationManager(CommunicationContext& ctx, HorovodGloba
   std::shared_ptr<AllreduceOp> allreduce_op(new AllreduceOp(&ctx, &state));
   std::shared_ptr<AllgatherOp> allgather_op(new AllgatherOp(&ctx, &state));
   std::shared_ptr<BroadcastOp> broadcast_op(new BroadcastOp(&ctx, &state));
+  std::shared_ptr<ErrorOp> error_op(new ErrorOp(&ctx, &state));
   std::shared_ptr<AllreduceOp> hierarchical_allreduce_op;
   std::shared_ptr<AllgatherOp> hierarchical_allgather_op;
 
@@ -123,7 +124,7 @@ OperationManager* CreateOperationManager(CommunicationContext& ctx, HorovodGloba
 #endif
 
   return new OperationManager(&state.param_manager,
-                              allreduce_op, allgather_op, broadcast_op,
+                              allreduce_op, allgather_op, broadcast_op, error_op,
                               hierarchical_allreduce_op, hierarchical_allgather_op);
 }
 
@@ -495,25 +496,18 @@ void PerformOperation(TensorTable& tensor_table, MPIResponse response) {
 
   Status status;
   try {
-    if (response.response_type() == MPIResponse::ALLGATHER) {
-      status = op_manager->GetAllgatherOp()->Execute(entries, response);
-    } else if (response.response_type() == MPIResponse::ALLREDUCE) {
-      status = op_manager->GetAllreduceOp()->Execute(entries, response);
-    } else if (response.response_type() == MPIResponse::BROADCAST) {
-      status = op_manager->GetBroadcastOp()->Execute(entries, response);
-    } else if (response.response_type() == MPIResponse::ERROR) {
-      assert(entries.size() == 1);
-      auto e = entries[0];
-      status = Status::PreconditionError(response.error_message());
-    }
+    status = op_manager->GetOp(response)->Execute(entries, response);
   } catch (const std::exception& ex) {
     status = Status::UnknownError(ex.what());
   }
 
-  for (auto& e : entries) {
-    timeline.End(e.tensor_name, status.ok() ? e.output : nullptr);
-    e.callback(status);
+  if (!status.finalizing()) {
+    for (auto& e : entries) {
+      timeline.End(e.tensor_name, status.ok() ? e.output : nullptr);
+      e.callback(status);
+    }
   }
+
 }
 
 // Report Tensors that were submitted to be reduced, gathered or broadcasted by

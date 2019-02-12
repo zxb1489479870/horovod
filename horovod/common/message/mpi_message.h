@@ -94,7 +94,7 @@ private:
 // an error message instead.
 class MPIResponse : public HorovodResponse {
 public:
-  ResponseType response_type() const;
+  ResponseType response_type() const override;
   void set_response_type(ResponseType value);
 
   // Empty if the type is DONE or SHUTDOWN.
@@ -104,7 +104,7 @@ public:
   void add_tensor_name(const std::string& value);
 
   // Empty unless response_type is ERROR.
-  const std::string& error_message() const;
+  const std::string& error_message() const override;
   void set_error_message(const std::string& value);
 
   const std::vector<int32_t>& devices() const override;
