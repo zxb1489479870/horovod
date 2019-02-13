@@ -9,8 +9,8 @@ import horovod.torch as hvd
 
 # Training settings
 parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
-parser.add_argument('--batch-size', type=int, default=64, metavar='N',
-                    help='input batch size for training (default: 64)')
+parser.add_argument('--batch-size', type=int, default=128, metavar='N',
+                    help='input batch size for training (default: 128)')
 parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
                     help='input batch size for testing (default: 1000)')
 parser.add_argument('--epochs', type=int, default=10, metavar='N',
@@ -40,7 +40,7 @@ if args.cuda:
     torch.cuda.manual_seed(args.seed)
 
 
-kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
+kwargs = {'num_workers': 0, 'pin_memory': True} if args.cuda else {}
 train_dataset = \
     datasets.MNIST('data-%d' % hvd.rank(), train=True, download=True,
                    transform=transforms.Compose([
@@ -64,7 +64,6 @@ test_sampler = torch.utils.data.distributed.DistributedSampler(
 test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=args.test_batch_size,
                                           sampler=test_sampler, **kwargs)
 
-
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
@@ -81,7 +80,7 @@ class Net(nn.Module):
         x = F.relu(self.fc1(x))
         x = F.dropout(x, training=self.training)
         x = self.fc2(x)
-        return F.log_softmax(x)
+        return F.log_softmax(x, dim=1)
 
 
 model = Net()
@@ -110,9 +109,11 @@ def train(epoch):
     model.train()
     # Horovod: set epoch to sampler for shuffling.
     train_sampler.set_epoch(epoch)
+    #print(len(train_sampler))
     for batch_idx, (data, target) in enumerate(train_loader):
         if args.cuda:
             data, target = data.cuda(), target.cuda()
+        #print(data.size(0))
         optimizer.zero_grad()
         output = model(data)
         loss = F.nll_loss(output, target)
@@ -150,7 +151,7 @@ def test():
     # this worker's partition.
     test_loss /= len(test_sampler)
     test_accuracy /= len(test_sampler)
-
+    #print(len(test_sampler))
     # Horovod: average metric values across workers.
     test_loss = metric_average(test_loss, 'avg_loss')
     test_accuracy = metric_average(test_accuracy, 'avg_accuracy')
@@ -160,7 +161,7 @@ def test():
         print('\nTest set: Average loss: {:.4f}, Accuracy: {:.2f}%\n'.format(
             test_loss, 100. * test_accuracy))
 
-
-for epoch in range(1, args.epochs + 1):
-    train(epoch)
+if __name__ == "__main__":
+    for epoch in range(1, args.epochs + 1):
+        train(epoch)
     test()
