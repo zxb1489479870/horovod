@@ -38,6 +38,18 @@
 #include "timeline.h"
 #include "logging.h"
 
+#if HAVE_CUDA
+#include "op/cuda_operations.h"
+#endif
+
+#if HAVE_NCCL
+#include "op/nccl_operations.h"
+#endif
+
+#if HAVE_DDL
+#include "op/ddl_operations.h"
+#endif
+
 /*
  * Allreduce, Allgather and Broadcast Ops.
  *
@@ -74,6 +86,14 @@ HorovodGlobalState horovod_global;
 
 MPIContext mpi_context;
 
+#if HAVE_CUDA
+CUDAContext cuda_context;
+#endif
+
+#if HAVE_NCCL
+NCCLContext nccl_context;
+#endif
+
 std::unique_ptr<OperationManager> op_manager;
 
 // For clarify in argument lists.
@@ -107,16 +127,16 @@ OperationManager* CreateOperationManager(CommunicationContext& ctx, HorovodGloba
 
 #if HAVE_CUDA
 #if HOROVOD_GPU_ALLREDUCE == 'M'
-  allreduce_op.reset(new CUDAAllreduce(&cuda_ctx, &ctx, &state));
+  allreduce_op.reset(new CUDAAllreduce(&cuda_context, &ctx, &state));
 
 #else
   #if HAVE_NCCL && HOROVOD_GPU_ALLREDUCE == 'N'
-    allreduce_op.reset(new NCCLAllreduce(&nccl_ctx, &cuda_ctx, &ctx, &state));
+    allreduce_op.reset(new NCCLAllreduce(&nccl_context, &cuda_context, &ctx, &state));
     hierarchical_allreduce_op.reset(
-        new HierarchicalAllreduce(&nccl_ctx, &cuda_ctx, &ctx, &state));
+        new HierarchicalAllreduce(&nccl_context, &cuda_context, &ctx, &state));
 
   #elif HAVE_DDL && HOROVOD_GPU_ALLREDUCE == 'D'
-    allreduce_op.reset(new DDLAllreduce(&cuda_ctx, &ctx, &state));
+    allreduce_op.reset(new DDLAllreduce(&cuda_context, &ctx, &state));
   #endif
 
   hierarchical_allgather_op.reset(new HierarchicalAllgather());
