@@ -104,12 +104,6 @@ struct HorovodGlobalState {
   bool ddl_initialized = false;
   int32_t ddl_local_device_id = 0;
 
-// We reuse CUDA events as it appears that their creation carries non-zero cost.
-#if HAVE_CUDA
-  std::unordered_map<int, std::queue<cudaEvent_t>> cuda_events;
-  std::mutex cuda_events_mutex;
-#endif
-
   ~HorovodGlobalState() {
     // Make sure that the destructor of the background thread is safe to
     // call. If a thread is still joinable (not detached or complete) its

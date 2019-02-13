@@ -35,7 +35,7 @@ protected:
   void CustomAllreduce(std::vector<TensorTableEntry>& entries,
                        cudaStream_t& stream, std::queue<std::pair<std::string, cudaEvent_t>>& event_queue,
                        const void* fused_input_data, void* buffer_data,
-                       int64_t& num_elements, size_t& buffer_len) override;
+                       int64_t& num_elements, size_t& buffer_len, void* host_buffer) override;
 };
 
 } // namespace common

@@ -39,15 +39,15 @@
 #include "logging.h"
 
 #if HAVE_CUDA
-#include "op/cuda_operations.h"
+#include "ops/cuda_operations.h"
 #endif
 
 #if HAVE_NCCL
-#include "op/nccl_operations.h"
+#include "ops/nccl_operations.h"
 #endif
 
 #if HAVE_DDL
-#include "op/ddl_operations.h"
+#include "ops/ddl_operations.h"
 #endif
 
 /*
@@ -139,7 +139,7 @@ OperationManager* CreateOperationManager(CommunicationContext& ctx, HorovodGloba
     allreduce_op.reset(new DDLAllreduce(&cuda_context, &ctx, &state));
   #endif
 
-  hierarchical_allgather_op.reset(new HierarchicalAllgather());
+  hierarchical_allgather_op.reset(new HierarchicalAllgather(&ctx, &state));
 #endif
 #endif
 

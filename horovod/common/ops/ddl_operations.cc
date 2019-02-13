@@ -79,7 +79,7 @@ void DDLAllreduce::CustomAllreduce(std::vector<TensorTableEntry>& entries,
                                    cudaStream_t& stream, std::queue<std::pair<std::string,
                                    cudaEvent_t>>& event_queue,
                                    const void* fused_input_data, void* buffer_data,
-                                   int64_t& num_elements, size_t& buffer_len) {
+                                   int64_t& num_elements, size_t& buffer_len, void* host_buffer) {
   // Synchronize.
   auto& timeline = global_state_->timeline;
   WAIT_FOR_EVENTS(entries, timeline, event_queue)

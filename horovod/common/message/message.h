@@ -18,6 +18,7 @@
 #define HOROVOD_MESSAGE_H
 
 #include <iostream>
+#include <vector>
 
 namespace horovod {
 namespace common {

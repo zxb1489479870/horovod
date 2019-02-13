@@ -236,7 +236,7 @@ TFOpContext::AllocateOutput(common::TensorShape shape,
 #if HAVE_CUDA
   // On GPU allocation is asynchronous, we need to wait for it to
   // complete.
-  auto device_context = cuda_context_->op_device_context();
+  auto device_context = context_->op_device_context();
   if (device_context != nullptr) {
     device_context->stream()->BlockHostUntilDone();
   }

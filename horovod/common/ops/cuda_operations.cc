@@ -61,10 +61,6 @@ cudaError_t CUDAContext::ReleaseCudaEvent(cudaEvent_t event) {
   return cudaSuccess;
 }
 
-bool CUDAOperation::OnGPU_NoMPI(TensorTableEntry e) const {
-  return e.device != CPU_DEVICE_ID;
-}
-
 void CUDAContext::ErrorCheck(std::string op_name, cudaError_t cuda_result) {
   if (cuda_result != cudaSuccess) {
     throw std::logic_error(std::string(op_name) + " failed: " + cudaGetErrorString(cuda_result));
@@ -189,7 +185,7 @@ Status CUDACustomAllreduce::Execute(std::vector<TensorTableEntry>& entries, cons
   }
 
   void* host_buffer = nullptr;
-  CustomAllreduce(entries, num_elements, buffer_len);
+  CustomAllreduce(entries, stream, event_queue, fused_input_data, buffer_data, num_elements, buffer_len, host_buffer);
 
   if (entries.size() > 1) {
     // Copy memory out of the fusion buffer.
@@ -210,11 +206,11 @@ Status CUDACustomAllreduce::Execute(std::vector<TensorTableEntry>& entries, cons
 
   // Use completion marker via event because it's faster than
   // blocking cudaStreamSynchronize() in this thread.
-  cuda_context_->RecordEvent("", stream);
+  cuda_context_->RecordEvent(event_queue, "", stream);
 
   // TODO: use thread pool or single thread for callbacks
   std::thread finalizer_thread([entries, first_entry, host_buffer,
-                                event_queue, &timeline]() mutable {
+                                event_queue, &timeline, this]() mutable {
     auto cuda_result = cudaSetDevice(first_entry.device);
     cuda_context_->ErrorCheck("cudaSetDevice", cuda_result);
 
@@ -241,7 +237,7 @@ bool CUDAAllreduce::OnGPU(std::vector<TensorTableEntry>& entries) {
 
 void CUDAAllreduce::InitCUDA(std::vector<TensorTableEntry>& entries) {
   auto& first_entry = entries[0];
-  cuda_context_->ErrorCheck(cudaSetDevice, cudaSetDevice(first_entry.device));
+  cuda_context_->ErrorCheck("cudaSetDevice", cudaSetDevice(first_entry.device));
 
   // Ensure stream is in the map before executing reduction.
   cudaStream_t& stream = cuda_context_->streams[first_entry.device];

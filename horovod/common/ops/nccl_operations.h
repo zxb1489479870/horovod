@@ -26,6 +26,7 @@ namespace common {
 
 struct NCCLContext {
   std::unordered_map<std::vector<int32_t>, ncclComm_t> nccl_comms;
+  ncclComm_t nccl_comm;
 
   void ErrorCheck(std::string op_name, ncclResult_t nccl_result);
 };
@@ -40,9 +41,8 @@ protected:
   void CustomAllreduce(std::vector<TensorTableEntry>& entries,
                        cudaStream_t& stream, std::queue<std::pair<std::string, cudaEvent_t>>& event_queue,
                        const void* fused_input_data, void* buffer_data,
-                       int64_t& num_elements, size_t& buffer_len) override;
+                       int64_t& num_elements, size_t& buffer_len, void* host_buffer) override;
 
-private:
   virtual const std::vector<int32_t> GetDeviceMap(const std::vector<int32_t>& devices);
   virtual void SetCommStrategy(int& nccl_rank, int& nccl_size,
                                CommunicationContext::Communicator& nccl_id_bcast_comm);
@@ -52,13 +52,14 @@ private:
 
 class HierarchicalAllreduce : public NCCLAllreduce {
 public:
-  HierarchicalAllreduce(NCCLContext* nccl_context, CUDAContext* cuda_context, HorovodGlobalState* global_state);
+  HierarchicalAllreduce(NCCLContext* nccl_context, CUDAContext* cuda_context,
+                        CommunicationContext* comm_context, HorovodGlobalState* global_state);
 
 protected:
   void CustomAllreduce(std::vector<TensorTableEntry>& entries,
                        cudaStream_t& stream, std::queue<std::pair<std::string, cudaEvent_t>>& event_queue,
                        const void* fused_input_data, void* buffer_data,
-                       int64_t& num_elements, size_t& buffer_len) override;
+                       int64_t& num_elements, size_t& buffer_len, void* host_buffer) override;
 
 private:
   const std::vector<int32_t> GetDeviceMap(const std::vector<int32_t>& devices) override;
