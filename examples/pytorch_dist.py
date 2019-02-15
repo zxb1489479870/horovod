@@ -6,6 +6,7 @@ import torch.distributed as dist
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+import argparse
 
 from math import ceil
 from random import Random
@@ -13,6 +14,18 @@ from torch.multiprocessing import Process
 from torch.autograd import Variable
 from torchvision import datasets, transforms
 
+parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
+parser.add_argument('--batch-size', type=int, default=128, metavar='N',
+        help='input batch size for training (default: 128)')
+parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
+        help='input batch size for testing (default: 1000)')
+parser.add_argument('--epochs', type=int, default=10, metavar='N',
+        help='number of epochs to train (default: 10)')
+parser.add_argument('--lr', type=float, default=0.01, metavar='LR',
+        help='learning rate (default: 0.01)')
+parser.add_argument('--momentum', type=float, default=0.5, metavar='M',
+        help='SGD momentum (default: 0.5)')
+args = parser.parse_args()
 
 class Partition(object):
     """ Dataset-like object, but only access a subset of it. """
@@ -74,7 +87,7 @@ class Net(nn.Module):
 def partition_train_dataset():
     """ Partitioning MNIST train"""
     dataset = datasets.MNIST(
-        './data',
+        'data',
         train=True,
         download=True,
         transform=transforms.Compose([
@@ -82,7 +95,7 @@ def partition_train_dataset():
             transforms.Normalize((0.1307, ), (0.3081, ))
         ]))
     size = dist.get_world_size()
-    bsz =int(128 / float(size))
+    bsz =int(args.batch_size / float(size))
     partition_sizes = [1.0 / size for _ in range(size)]
     partition = DataPartitioner(dataset, partition_sizes)
     partition = partition.use(dist.get_rank())
@@ -101,7 +114,7 @@ def partition_test_dataset():
             transforms.Normalize((0.1307, ), (0.3081, ))
         ]))
     size = dist.get_world_size()
-    bsz =int(1000 / float(size))
+    bsz =int(args.test_batch_size / float(size))
     partition_sizes = [1.0 / size for _ in range(size)]
     partition = DataPartitioner(dataset, partition_sizes)
     partition = partition.use(dist.get_rank())
@@ -124,10 +137,10 @@ def train(rank, size):
     model.train()
     train_set, train_bsz = partition_train_dataset()
     #model = model.cuda(rank)
-    optimizer = optim.SGD(model.parameters(), lr=0.01, momentum=0.5)
+    optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
     #print(len(train_set.dataset))
     num_batches = ceil(len(train_set.dataset) / float(train_bsz))
-    for epoch in range(10):
+    for epoch in range(args.epochs):
         epoch_loss = 0.0
         for data, target in train_set:
             data, target = Variable(data), Variable(target)
