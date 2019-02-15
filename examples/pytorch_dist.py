@@ -170,18 +170,22 @@ def test(rank, size):
 #       data, target = Variable(data.cuda(rank)), Variable(target.cuda(rank))
         output = model(data)
         loss = F.nll_loss(output, target)
-        test_loss += loss.item()
+        #test_loss += loss.item()
+        test_loss += loss
         pred = output.data.max(1, keepdim=True)[1]
         test_accuracy += pred.eq(target.data.view_as(pred)).cpu().float().sum()
 
+    test_loss /= num_batches
+    test_accuracy /= len(test_set.dataset)
+    dist.all_reduce(test_loss, op=dist.ReduceOp.SUM)
+    dist.all_reduce(test_accuracy, op=dist.ReduceOp.SUM)
+    #print(dist.get_world_size())
     if (dist.get_rank() == 0):
-        print('Rank ',
-                dist.get_rank(), ', Average loss for test set is : ',
-                test_loss / num_batches)
-        print(len(test_set.dataset))
-        print('Rank ', 
-                dist.get_rank(), ',the accuracy is : ',
-                100. * test_accuracy.item() / len(test_set.dataset))
+        print('Average loss for test set is : ',
+                test_loss.item() / dist.get_world_size())
+       # print(len(test_set.dataset))
+        print('Average accuracy is : ',
+                100. * test_accuracy.item() / dist.get_world_size())
 
 def run(rank, size):
     train(rank, size)
